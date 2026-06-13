@@ -69,18 +69,10 @@ class KeepAliveManager:
         # would trigger client.start() on an already-running client.
         self._updates_too_long_flag.clear()
 
-        # If a previous client.stop() failed to fully tear down the
-        # connection, pyrogram's internal is_connected flag can be left
-        # True, causing the next start() -> connect() to immediately raise
-        # "Client is already connected". Force a disconnect first if so.
         if self.client.is_connected:
-            logger.warning("Client still marked connected — forcing disconnect before restart.")
-            try:
-                await self.client.disconnect()
-            except Exception as exc:
-                logger.warning("Error during forced disconnect: %s", exc)
-
-        await self.client.start()
+            logger.info("Client already running — reusing existing connection.")
+        else:
+            await self.client.start()
 
         # Register raw update handler to catch UpdatesTooLong
         self.client.add_handler(
