@@ -2,7 +2,6 @@
 
 import base64
 import re
-import time
 import asyncio
 import logging 
 from pyrogram import filters
@@ -10,11 +9,6 @@ from pyrogram.enums import ChatMemberStatus
 from config import FORCE_SUB_CHANNEL, ADMINS, AUTO_DELETE_TIME, AUTO_DEL_SUCCESS_MSG
 from pyrogram.errors.exceptions.bad_request_400 import UserNotParticipant
 from pyrogram.errors import FloodWait
-
-# Cache subscription results for a short period so repeat /start calls from
-# the same user don't hit Telegram's get_chat_member API every time.
-_SUB_CACHE_TTL = 300  # 5 minutes
-_sub_cache: dict[int, tuple[bool, float]] = {}
 
 
 async def is_subscribed(filter, client, update):
@@ -24,21 +18,15 @@ async def is_subscribed(filter, client, update):
     if user_id in ADMINS:
         return True
 
-    cached = _sub_cache.get(user_id)
-    if cached is not None:
-        result, ts = cached
-        if time.monotonic() - ts < _SUB_CACHE_TTL:
-            return result
-
     try:
         member = await client.get_chat_member(chat_id=FORCE_SUB_CHANNEL, user_id=user_id)
     except UserNotParticipant:
-        _sub_cache[user_id] = (False, time.monotonic())
         return False
 
-    result = member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]
-    _sub_cache[user_id] = (result, time.monotonic())
-    return result
+    if not member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
+        return False
+    else:
+        return True
 
 async def encode(string):
     string_bytes = string.encode("ascii")
