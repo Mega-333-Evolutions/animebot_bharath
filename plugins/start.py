@@ -207,16 +207,20 @@ async def not_joined(client: Client, message: Message):
     buttons = [join_buttons[i:i + 2] for i in range(0, len(join_buttons), 2)]
 
     try:
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    text = 'Try Again',
-                    url = f"https://t.me/{client.username}?start={message.command[1]}"
-                )
-            ]
-        )
+        try_again_url = f"https://t.me/{client.username}?start={message.command[1]}"
     except IndexError:
-        pass
+        # Plain /start with no file payload to retry — just relink to a bare
+        # /start so the button is never missing.
+        try_again_url = f"https://t.me/{client.username}"
+
+    buttons.append(
+        [
+            InlineKeyboardButton(
+                text = 'Try Again',
+                url = try_again_url
+            )
+        ]
+    )
 
     await message.reply(
         text = FORCE_MSG.format(
