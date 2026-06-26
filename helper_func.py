@@ -6,27 +6,33 @@ import asyncio
 import logging 
 from pyrogram import filters
 from pyrogram.enums import ChatMemberStatus
-from config import FORCE_SUB_CHANNEL, ADMINS, AUTO_DELETE_TIME, AUTO_DEL_SUCCESS_MSG
+from config import FORCE_SUB_CHANNELS, ADMINS, AUTO_DELETE_TIME, AUTO_DEL_SUCCESS_MSG
 from pyrogram.errors.exceptions.bad_request_400 import UserNotParticipant
 from pyrogram.errors import FloodWait
 
 
+async def get_missing_fsub_channels(client, user_id):
+    """Return the list of configured force-sub channel IDs the user has NOT joined yet."""
+    if user_id in ADMINS:
+        return []
+    missing = []
+    for channel_id in FORCE_SUB_CHANNELS:
+        try:
+            member = await client.get_chat_member(chat_id=channel_id, user_id=user_id)
+        except UserNotParticipant:
+            missing.append(channel_id)
+            continue
+        if member.status not in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
+            missing.append(channel_id)
+    return missing
+
+
 async def is_subscribed(filter, client, update):
-    if not FORCE_SUB_CHANNEL:
+    if not FORCE_SUB_CHANNELS:
         return True
     user_id = update.from_user.id
-    if user_id in ADMINS:
-        return True
-
-    try:
-        member = await client.get_chat_member(chat_id=FORCE_SUB_CHANNEL, user_id=user_id)
-    except UserNotParticipant:
-        return False
-
-    if not member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
-        return False
-    else:
-        return True
+    missing = await get_missing_fsub_channels(client, user_id)
+    return len(missing) == 0
 
 async def encode(string):
     string_bytes = string.encode("ascii")
