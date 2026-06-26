@@ -167,11 +167,21 @@ async def not_joined(client: Client, message: Message):
     user_id = message.from_user.id
     missing_channels = await get_missing_fsub_channels(client, user_id)
 
-    buttons = []
+    join_buttons = []
     for channel_id in missing_channels:
         info = getattr(client, "force_sub_info", {}).get(channel_id, {})
         title = info.get("title") or "Channel"
         channel_url = info.get("link")
+
+        # Re-fetch the chat to get the current title — the channel may have
+        # been renamed after the bot started, and force_sub_info is only
+        # populated once at startup.
+        try:
+            chat = await client.get_chat(channel_id)
+            if chat.title:
+                title = chat.title
+        except Exception:
+            pass  # fall back to the cached title above
 
         if bool(JOIN_REQUEST_ENABLE):
             try:
@@ -186,14 +196,15 @@ async def not_joined(client: Client, message: Message):
         if not channel_url:
             continue  # can't build a usable button for this channel, skip it
 
-        buttons.append(
-            [
-                InlineKeyboardButton(
-                    f"Join {title}",
-                    url=channel_url
-                )
-            ]
+        join_buttons.append(
+            InlineKeyboardButton(
+                f"Join {title}",
+                url=channel_url
+            )
         )
+
+    # Lay out two join buttons per row, side by side.
+    buttons = [join_buttons[i:i + 2] for i in range(0, len(join_buttons), 2)]
 
     try:
         buttons.append(
