@@ -16,6 +16,7 @@ from config import (
     TG_BOT_TOKEN, 
     TG_BOT_WORKERS, 
     FORCE_SUB_CHANNEL, 
+    FORCE_SUB_CHANNELS,
     CHANNEL_ID, 
     PORT
 )
@@ -51,23 +52,32 @@ class Bot(Client):
         self.uptime = datetime.now()
         self.username = usr_bot_me.username
 
-        # ── Force Sub Channel ──
-        if FORCE_SUB_CHANNEL:
+        # ── Force Sub Channels (1-3, all optional) ──
+        self.invitelink = None       # kept for backward compatibility (1st channel)
+        self.force_sub_info = {}     # {channel_id: {"link": str, "title": str}}
+        for channel_id in FORCE_SUB_CHANNELS:
             try:
-                link = (await self.get_chat(FORCE_SUB_CHANNEL)).invite_link
+                chat = await self.get_chat(channel_id)
+                link = chat.invite_link
                 if not link:
-                    await self.export_chat_invite_link(FORCE_SUB_CHANNEL)
-                    link = (await self.get_chat(FORCE_SUB_CHANNEL)).invite_link
-                self.invitelink = link
+                    await self.export_chat_invite_link(channel_id)
+                    chat = await self.get_chat(channel_id)
+                    link = chat.invite_link
+                self.force_sub_info[channel_id] = {
+                    "link": link,
+                    "title": chat.title or "Channel",
+                }
+                if channel_id == FORCE_SUB_CHANNEL:
+                    self.invitelink = link
             except Exception as a:
                 self.LOGGER(__name__).warning(a)
                 self.LOGGER(__name__).warning(
-                    "Bot can't export invite link from Force Sub Channel!"
+                    "Bot can't export invite link from Force Sub Channel %s!", channel_id
                 )
                 self.LOGGER(__name__).warning(
-                    "Please double-check FORCE_SUB_CHANNEL and ensure bot is admin "
+                    "Please double-check the channel ID and ensure bot is admin "
                     "with 'Invite Users via Link' permission. Current: %s",
-                    FORCE_SUB_CHANNEL,
+                    channel_id,
                 )
                 self.LOGGER(__name__).info(
                     "Bot Stopped. Join https://t.me/CodeXBotzSupport"
