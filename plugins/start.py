@@ -8,8 +8,8 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated
 
 from bot import Bot
-from config import ADMINS, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, START_PIC, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE,FORCE_SUB_CHANNEL
-from helper_func import subscribed,decode, get_messages, delete_file
+from config import ADMINS, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, START_PIC, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE
+from helper_func import subscribed, decode, get_messages, delete_file, get_missing_fsub_channels
 from database.database import add_user, del_user, full_userbase, present_user
 
 
@@ -164,22 +164,36 @@ REPLY_ERROR = """<code>Use this command as a replay to any telegram message with
 @Bot.on_message(filters.command('start') & filters.private)
 async def not_joined(client: Client, message: Message):
 
-    if bool(JOIN_REQUEST_ENABLE):
-        invite = await client.create_chat_invite_link(
-            chat_id=FORCE_SUB_CHANNEL,
-            creates_join_request=True
-        )
-        ButtonUrl = invite.invite_link
-    else:
-        ButtonUrl = client.invitelink
+    user_id = message.from_user.id
+    missing_channels = await get_missing_fsub_channels(client, user_id)
 
-    buttons = [
-        [
-            InlineKeyboardButton(
-                "Join Channel",
-                url = ButtonUrl)
-        ]
-    ]
+    buttons = []
+    for channel_id in missing_channels:
+        info = getattr(client, "force_sub_info", {}).get(channel_id, {})
+        title = info.get("title") or "Channel"
+        channel_url = info.get("link")
+
+        if bool(JOIN_REQUEST_ENABLE):
+            try:
+                invite = await client.create_chat_invite_link(
+                    chat_id=channel_id,
+                    creates_join_request=True
+                )
+                channel_url = invite.invite_link
+            except Exception:
+                pass  # fall back to the stored invite link, if any
+
+        if not channel_url:
+            continue  # can't build a usable button for this channel, skip it
+
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"Join {title}",
+                    url=channel_url
+                )
+            ]
+        )
 
     try:
         buttons.append(
