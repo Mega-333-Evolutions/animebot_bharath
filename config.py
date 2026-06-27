@@ -56,7 +56,7 @@ except ValueError:
         raise Exception("Your Admins list does not contain valid integers.")
 
 #Force sub message 
-FORCE_MSG = os.environ.get("FORCE_SUB_MESSAGE", "Hey {mention}, Please join the below channels and press try again 👇👇👇")
+FORCE_MSG = os.environ.get("FORCE_SUB_MESSAGE", "Hey {mention}, Please join our <a href='https://t.me/English_Animes_channel'>channel</a> and try again 👇👇👇")
 
 #set your Custom Caption here, Keep None for Disable Custom Caption
 CUSTOM_CAPTION = os.environ.get("CUSTOM_CAPTION", None)
@@ -72,7 +72,7 @@ AUTO_DEL_SUCCESS_MSG = os.environ.get("AUTO_DEL_SUCCESS_MSG", "Your file has bee
 #Set true if you want Disable your Channel Posts Share button
 DISABLE_CHANNEL_BUTTON = os.environ.get("DISABLE_CHANNEL_BUTTON", None) == 'True'
 
-BOT_STATS_TEXT = "Hi, I'm alive and ready to store and share files.\n\n<b>⏱ UPTIME : </b>{uptime}"
+BOT_STATS_TEXT = "Hi, I'm alive and ready to store and share files.\n\n<b>⏱ UPTIME : </b>{uptime}\n<b>📶 PING : </b>{ping} ms"
 USER_REPLY_TEXT = "If you have any problems or need anything kindly report it in our group <a href='https://t.me/+lKbsNn0ixhs1Yjk1'>@Animes_Discussion_group</a>"
 
 ADMINS.append(OWNER_ID)
