@@ -95,13 +95,22 @@ async def get_message_id(client, message):
 
 def get_readable_time(seconds: int) -> str:
     seconds = int(seconds)
-    days, remainder = divmod(seconds, 86400)
-    hours, remainder = divmod(remainder, 3600)
-    minutes, secs = divmod(remainder, 60)
-
-    if days > 0:
-        return f"{days}days, {hours}h:{minutes}m:{secs}s"
-    return f"{hours}h:{minutes}m:{secs}s"
+    periods = [
+        ("y", 365 * 86400),
+        ("mo", 30 * 86400),
+        ("w", 7 * 86400),
+        ("d", 86400),
+        ("h", 3600),
+        ("m", 60),
+    ]
+    remainder = seconds
+    parts = []
+    for suffix, length in periods:
+        value, remainder = divmod(remainder, length)
+        if value > 0:
+            parts.append(f"{value}{suffix}")
+    parts.append(f"{remainder}s")  # seconds is always shown, even if 0
+    return ":".join(parts)
 
 async def delete_file(messages, client, process):
     await asyncio.sleep(AUTO_DELETE_TIME)
