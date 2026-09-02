@@ -38,7 +38,7 @@ jobs:
           git add .gitattributes
           git add .
           
-          # Only attempt to commit if there are actual changes
+          # Only attempt to commit if there are actual changes.
           if git diff-index --quiet HEAD --; then
             echo "No changes to commit"
           else
