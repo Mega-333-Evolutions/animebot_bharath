@@ -32,6 +32,7 @@ class KeepAliveManager:
 
         self._heartbeat_task: asyncio.Task | None = None
         self._updates_too_long_flag = asyncio.Event()
+        self._heartbeat_failed_flag = asyncio.Event()
         self._shutdown_flag = asyncio.Event()
         self._is_running = False
 
@@ -65,6 +66,7 @@ class KeepAliveManager:
 
     async def _lifecycle(self):
         self._updates_too_long_flag.clear()
+        self._heartbeat_failed_flag.clear()
 
         if self.client.is_connected:
             logger.info("Client already running — reusing existing connection.")
@@ -106,10 +108,11 @@ class KeepAliveManager:
         """
         idle_task = asyncio.create_task(idle())
         too_long_task = asyncio.create_task(self._updates_too_long_flag.wait())
+        heartbeat_task = asyncio.create_task(self._heartbeat_failed_flag.wait())
         shutdown_task = asyncio.create_task(self._shutdown_flag.wait())
 
         done, pending = await asyncio.wait(
-            [idle_task, too_long_task, shutdown_task],
+            [idle_task, too_long_task, heartbeat_task, shutdown_task],
             return_when=asyncio.FIRST_COMPLETED,
         )
 
@@ -119,6 +122,10 @@ class KeepAliveManager:
         if too_long_task in done:
             logger.warning("UpdatesTooLong triggered — forcing reconnect.")
             self._updates_too_long_flag.clear()
+
+        if heartbeat_task in done:
+            logger.warning("Heartbeat failure triggered — forcing reconnect.")
+            self._heartbeat_failed_flag.clear()
 
 
     async def _heartbeat_loop(self):
@@ -132,10 +139,12 @@ class KeepAliveManager:
                 logger.debug("Heartbeat OK at %s", datetime.now().isoformat())
             except asyncio.TimeoutError:
                 logger.warning("Heartbeat timed out — connection likely stale.")
+                self._heartbeat_failed_flag.set()
                 return
 
             except Exception as exc:
                 logger.warning("Heartbeat failed: %s", exc)
+                self._heartbeat_failed_flag.set()
                 return
 
             try:
