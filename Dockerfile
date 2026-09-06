@@ -6,4 +6,8 @@ RUN pip3 install -r requirements.txt
 
 COPY . .
 
-CMD while true; do python3 main.py; echo "main.py exited — restarting in 3s"; sleep 3; done
+# Expose the port Hugging Face looks for
+EXPOSE 7860
+
+# Start a dummy web server on port 7860 in the background, then start your bot
+CMD python3 -m http.server 7860 & python3 main.py
