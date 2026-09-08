@@ -34,6 +34,7 @@ class KeepAliveManager:
         self._updates_too_long_flag = asyncio.Event()
         self._heartbeat_failed_flag = asyncio.Event()
         self._shutdown_flag = asyncio.Event()
+        self._raw_handler_registered = False
         self._is_running = False
 
     # ── Public API ──────────────────────────────────────────────
@@ -73,10 +74,23 @@ class KeepAliveManager:
         else:
             await self.client.start()
 
-        self.client.add_handler(
-            RawUpdateHandler(self._raw_update_handler),
-            group=-1,  # highest priority
-        )
+        # Plugins are only meant to be loaded once. Pyrogram's start() calls
+        # load_plugins() every time, which re-scans every plugin file and
+        # re-registers every handler on top of whatever is already there —
+        # load_plugins() has no dedup, so each reconnect silently doubles
+        # every handler (start_command, callback handlers, all of it).
+        # load_plugins() no-ops when self.client.plugins is falsy, so
+        # clearing it here — after the connection this manager relies on is
+        # already established — makes every future start() skip re-loading,
+        # regardless of whether the prior stop() fully cleared the dispatcher.
+        self.client.plugins = None
+
+        if not self._raw_handler_registered:
+            self.client.add_handler(
+                RawUpdateHandler(self._raw_update_handler),
+                group=-1,  # highest priority
+            )
+            self._raw_handler_registered = True
 
         # Start heartbeat in background
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
