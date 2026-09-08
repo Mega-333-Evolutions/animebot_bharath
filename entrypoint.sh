@@ -1,9 +1,12 @@
 #!/bin/bash
-# Runs main.py, restarting it if it crashes on its own — but if this script
-# receives a stop signal (e.g. Hugging Face stopping/restarting the Space),
-# it forwards that signal to main.py, waits for it to shut down cleanly,
-# and exits instead of relaunching. Without this, a bare restart loop
-# swallows the signal and the container never actually stops.
+# Starts a dummy web server on the port Hugging Face's health check expects,
+# then runs main.py, restarting it if it crashes on its own — but if this
+# script receives a stop signal (e.g. Hugging Face stopping/restarting the
+# Space), it forwards that signal to main.py, waits for it to shut down
+# cleanly, and exits instead of relaunching. Without this, a bare restart
+# loop swallows the signal and the container never actually stops.
+
+python3 -m http.server 7860 &
 
 child=0
 
