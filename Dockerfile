@@ -7,4 +7,6 @@ RUN pip3 install -r requirements.txt
 COPY . .
 RUN chmod +x entrypoint.sh
 
+EXPOSE 7860
+
 CMD ["./entrypoint.sh"]
