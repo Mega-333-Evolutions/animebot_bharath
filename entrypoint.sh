@@ -6,7 +6,11 @@
 # cleanly, and exits instead of relaunching. Without this, a bare restart
 # loop swallows the signal and the container never actually stops.
 
-python3 -m http.server 7860 &
+# Served from an isolated, empty directory — never /app — so this can't
+# expose .git or any other repo file over HTTP.
+mkdir -p /tmp/healthcheck
+echo "ok" > /tmp/healthcheck/index.html
+python3 -m http.server 7860 --directory /tmp/healthcheck &
 
 child=0
 
