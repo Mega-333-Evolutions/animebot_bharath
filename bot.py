@@ -116,7 +116,9 @@ class Bot(Client):
         # ── Hand over to keepalive (blocks forever) ──
         self._keepalive = KeepAliveManager(
             client=self,
-            heartbeat_interval=300,  # 5 min
+            heartbeat_interval=60,  # was 5 min — tighter interval means a dead
+                                    # connection is caught in under ~2 minutes
+                                    # worst-case instead of up to ~5.5 minutes
             reconnect_delay=5,
         )
 
