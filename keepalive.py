@@ -2,7 +2,7 @@ import asyncio
 import logging
 from datetime import datetime
 
-from pyrogram import Client, idle, raw
+from pyrogram import Client, raw
 from pyrogram.handlers import RawUpdateHandler
 from pyrogram.raw import types
 from pyrogram import ContinuePropagation
@@ -116,17 +116,23 @@ class KeepAliveManager:
     async def _wait_for_failure(self):
         """
         Blocks until one of:
-        - idle() returns (connection lost)
         - UpdatesTooLong is detected
+        - the heartbeat detects a stale connection
         - shutdown is requested
+
+        Deliberately does not use Pyrogram's idle() here: idle() installs
+        its own signal.signal() handlers for SIGINT/SIGTERM every time it
+        runs, which can compete with bot.py's own signal handling and is
+        re-installed on every single reconnect. It only ever reacts to OS
+        signals — never an actual dropped connection — so shutdown_task
+        below already covers everything it did, without the side effect.
         """
-        idle_task = asyncio.create_task(idle())
         too_long_task = asyncio.create_task(self._updates_too_long_flag.wait())
         heartbeat_task = asyncio.create_task(self._heartbeat_failed_flag.wait())
         shutdown_task = asyncio.create_task(self._shutdown_flag.wait())
 
         done, pending = await asyncio.wait(
-            [idle_task, too_long_task, heartbeat_task, shutdown_task],
+            [too_long_task, heartbeat_task, shutdown_task],
             return_when=asyncio.FIRST_COMPLETED,
         )
 
