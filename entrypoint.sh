@@ -1,10 +1,17 @@
 #!/bin/bash
 # Starts a dummy web server on the port Hugging Face's health check expects,
-# then runs main.py, restarting it if it crashes on its own — but if this
-# script receives a stop signal (e.g. Hugging Face stopping/restarting the
-# Space), it forwards that signal to main.py, waits for it to shut down
-# cleanly, and exits instead of relaunching. Without this, a bare restart
-# loop swallows the signal and the container never actually stops.
+# then runs main.py, restarting it whenever it exits — whether from a crash
+# or from a stop signal. An earlier version of this script exited instead of
+# restarting after a signal, on the assumption Hugging Face would always
+# promptly replace the container with a freshly built one. That assumption
+# didn't hold in practice — a stop signal doesn't reliably mean a
+# replacement is coming right away, so exiting left the bot down with
+# nothing to bring it back. This version still forwards the signal to
+# main.py first, giving it a chance to close its Telegram session cleanly,
+# but always restarts afterward regardless of why it exited. If the whole
+# container is genuinely being torn down for a real redeploy, this restart
+# is harmless — the container disappears along with it moments later either
+# way.
 
 # Served from an isolated, empty directory — never /app — so this can't
 # expose .git or any other repo file over HTTP.
@@ -14,16 +21,14 @@ python3 -m http.server 7860 --directory /tmp/healthcheck &
 
 child=0
 
-term_handler() {
-    echo "Received stop signal — forwarding to bot and shutting down."
+forward_signal() {
+    echo "Received stop signal — forwarding to bot."
     if [ "$child" -ne 0 ]; then
         kill -TERM "$child" 2>/dev/null
-        wait "$child"
     fi
-    exit 0
 }
 
-trap term_handler TERM INT
+trap forward_signal TERM INT
 
 while true; do
     python3 main.py &
