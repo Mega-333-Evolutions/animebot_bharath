@@ -8,7 +8,7 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated
 
 from bot import Bot
-from config import ADMINS, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, START_PIC, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE
+from config import FORCE_SUB_CHANNELS, ADMINS, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, START_PIC, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE
 from helper_func import subscribed, decode, get_messages, delete_file, get_missing_fsub_channels
 from database.database import add_user, del_user, full_userbase, present_user
 
@@ -223,9 +223,16 @@ async def not_joined(client: Client, message: Message):
         if not channel_url:
             continue  # can't build a usable button for this channel, skip it
 
+        # Fixed button labels by channel position (FORCE_SUB_CHANNEL, 2, 3).
+        labels = ["News Channel", "Index Channel", "Backup Channel"]
+        try:
+            label = labels[FORCE_SUB_CHANNELS.index(channel_id)]
+        except (ValueError, IndexError):
+            label = title
+
         join_buttons.append(
             InlineKeyboardButton(
-                f"Join {title}",
+                f"Join {label}",
                 url=channel_url
             )
         )
