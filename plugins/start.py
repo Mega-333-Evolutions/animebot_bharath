@@ -212,6 +212,15 @@ async def not_joined(client: Client, message: Message):
                 pass  # fall back to the stored invite link, if any
 
         if not channel_url:
+            # Startup couldn't resolve this channel (e.g. brand-new channel the
+            # bot hadn't seen yet). Try again now that it may be cached.
+            try:
+                channel_url = await client.export_chat_invite_link(channel_id)
+                client.force_sub_info[channel_id] = {"link": channel_url, "title": title}
+            except Exception:
+                pass
+
+        if not channel_url:
             continue  # can't build a usable button for this channel, skip it
 
         join_buttons.append(
