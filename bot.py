@@ -3,10 +3,22 @@ from plugins import web_server
 
 import pyromod.listen
 from pyrogram import Client
+import pyrogram.utils as _pyro_utils
+
+# ── New-channel-ID support ──
+# Old Pyrogram (2.0.106) caps channel IDs at 32 bits (-1002147483647), so any
+# channel created recently (-1003..., -1004... ) fails with "Peer id invalid".
+# pyrofork/kurigram already ship the larger limits; this patch only raises the
+# limit if the installed library still has the old one.
+if _pyro_utils.MIN_CHANNEL_ID > -1007852516352:
+    _pyro_utils.MIN_CHANNEL_ID = -1007852516352
+if _pyro_utils.MIN_CHAT_ID > -999999999999:
+    _pyro_utils.MIN_CHAT_ID = -999999999999
 from pyrogram.enums import ParseMode
 import asyncio
 import signal
 import sys
+from types import SimpleNamespace
 from datetime import datetime
 
 from config import (
@@ -85,23 +97,24 @@ class Bot(Client):
                 #sys.exit()
 
         # ── DB Channel ──
+        # Never leave self.db_channel unset: every plugin reads db_channel.id.
+        # If Telegram can't resolve the channel right now (the bot hasn't
+        # "seen" it yet), fall back to the configured ID; Pyrogram caches the
+        # peer automatically as soon as any update from the channel arrives
+        # (a new post, or the bot being made admin), and later calls work.
+        self.db_channel = SimpleNamespace(id=CHANNEL_ID, username=None, title="DB Channel")
         try:
             db_channel = await self.get_chat(CHANNEL_ID)
-            if not db_channel:
-                db_channel - await self.get_chat("gunsncoffee")
             self.db_channel = db_channel
             test = await self.send_message(chat_id=db_channel.id, text="Test Message")
             await test.delete()
         except Exception as e:
             self.LOGGER(__name__).warning(e)
             self.LOGGER(__name__).warning(
-                "Make sure bot is Admin in DB Channel. Double-check CHANNEL_ID. "
-                "Current: %s", CHANNEL_ID
+                "Could not verify DB Channel %s yet. Make sure the bot is Admin there "
+                "and post any message in the channel once so the bot can see it. "
+                "Continuing with the configured ID.", CHANNEL_ID
             )
-            self.LOGGER(__name__).info(
-                "Bot Stopped. Join https://t.me/CodeXBotzSupport"
-            )
-            #sys.exit()
 
         self.set_parse_mode(ParseMode.HTML)
         self.LOGGER(__name__).info("Bot Running..!")
