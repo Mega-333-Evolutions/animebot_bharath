@@ -3,7 +3,6 @@
 import base64
 import re
 import asyncio
-import logging 
 from pyrogram import filters
 from pyrogram.enums import ChatMemberStatus
 from config import FORCE_SUB_CHANNELS, ADMINS, AUTO_DELETE_TIME, AUTO_DEL_SUCCESS_MSG
@@ -11,16 +10,8 @@ from pyrogram.errors.exceptions.bad_request_400 import UserNotParticipant
 from pyrogram.errors import FloodWait
 
 
-_fsub_warned = set()
-
-
 async def get_missing_fsub_channels(client, user_id):
-    """Return the list of configured force-sub channel IDs the user has NOT joined yet.
-
-    A channel the bot itself can't access (wrong ID, or bot not a member/admin
-    there) is logged once and skipped, so one bad channel no longer crashes
-    every /start.
-    """
+    """Return the list of configured force-sub channel IDs the user has NOT joined yet."""
     if user_id in ADMINS:
         return []
     missing = []
@@ -29,19 +20,6 @@ async def get_missing_fsub_channels(client, user_id):
             member = await client.get_chat_member(chat_id=channel_id, user_id=user_id)
         except UserNotParticipant:
             missing.append(channel_id)
-            continue
-        except FloodWait as e:
-            await asyncio.sleep(e.value)
-            missing.append(channel_id)
-            continue
-        except Exception as e:
-            if channel_id not in _fsub_warned:
-                _fsub_warned.add(channel_id)
-                logging.getLogger(__name__).warning(
-                    "Force-sub check skipped for %s: %s. The bot cannot access this "
-                    "channel - verify the ID and that the bot is a member/admin there.",
-                    channel_id, e,
-                )
             continue
         if member.status not in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
             missing.append(channel_id)
