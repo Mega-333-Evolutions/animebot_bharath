@@ -22,7 +22,9 @@ async def start_command(client: Client, message: Message):
         except:
             pass
     text = message.text
-    if len(text)>7:
+    # "/start start" (the Try Again link for people with no file payload) must
+    # behave exactly like a plain /start instead of being decoded as a file link.
+    if len(text)>7 and text.split(" ", 1)[-1].strip().lower() != "start":
         try:
             base64_string = text.split(" ", 1)[1]
         except:
@@ -245,7 +247,7 @@ async def not_joined(client: Client, message: Message):
     except IndexError:
         # Plain /start with no file payload to retry — just relink to a bare
         # /start so the button is never missing.
-        try_again_url = f"https://t.me/{client.username}"
+        try_again_url = f"https://t.me/{client.username}?start=start"
 
     buttons.append(
         [
