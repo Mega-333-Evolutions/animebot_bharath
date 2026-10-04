@@ -64,7 +64,6 @@ async def start_command(client: Client, message: Message):
         await temp_msg.delete()
 
         track_msgs = []
-        skipped_count = 0
 
         for msg in messages:
 
@@ -86,7 +85,6 @@ async def start_command(client: Client, message: Message):
                         track_msgs.append(copied_msg_for_deletion)
                     else:
                         print("Failed to copy message, skipping.")
-                        skipped_count += 1
 
                 except FloodWait as e:
                     await asyncio.sleep(e.value)
@@ -95,27 +93,22 @@ async def start_command(client: Client, message: Message):
                         track_msgs.append(copied_msg_for_deletion)
                     else:
                         print("Failed to copy message after retry, skipping.")
-                        skipped_count += 1
 
                 except Exception as e:
                     print(f"Error copying message: {e}")
-                    skipped_count += 1
 
             else:
                 try:
                     copied_msg = await msg.copy(chat_id=message.from_user.id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup, protect_content=PROTECT_CONTENT)
                     if not copied_msg:
                         print("Failed to copy message, skipping.")
-                        skipped_count += 1
                 except FloodWait as e:
                     await asyncio.sleep(e.value)
                     copied_msg = await msg.copy(chat_id=message.from_user.id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup, protect_content=PROTECT_CONTENT)
                     if not copied_msg:
                         print("Failed to copy message after retry, skipping.")
-                        skipped_count += 1
                 except Exception as e:
                     print(f"Error copying message: {e}")
-                    skipped_count += 1
 
         if track_msgs:
             delete_data = await client.send_message(
@@ -126,12 +119,6 @@ async def start_command(client: Client, message: Message):
             asyncio.create_task(delete_file(track_msgs, client, delete_data))
         else:
             print("No messages to track for deletion.")
-
-        if skipped_count:
-            await client.send_message(
-                chat_id=message.from_user.id,
-                text=f"⚠️ {skipped_count} file(s) in this batch couldn't be delivered (no longer available)."
-            )
 
         return
     else:
