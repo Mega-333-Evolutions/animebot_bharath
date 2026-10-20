@@ -16,7 +16,6 @@ if _pyro_utils.MIN_CHAT_ID > -999999999999:
     _pyro_utils.MIN_CHAT_ID = -999999999999
 from pyrogram.enums import ParseMode
 import asyncio
-import signal
 import sys
 from types import SimpleNamespace
 from datetime import datetime
@@ -32,7 +31,7 @@ from config import (
     CHANNEL_ID, 
     PORT
 )
-from keepalive import KeepAliveManager
+from keepalive import Watchdog
 
 ascii_art = """
 ░█████╗░░█████╗░██████╗░███████╗██╗░░██╗██████╗░░█████╗░████████╗███████╗
@@ -54,10 +53,10 @@ class Bot(Client):
             bot_token=TG_BOT_TOKEN,
         )
         self.LOGGER = LOGGER
-        self._keepalive = None
+        self._watchdog = None
 
     async def start(self):
-        """Setup only. Don't block here — KeepAliveManager handles the run loop."""
+        """Setup only. Pyrofork's run() keeps the process alive after this returns."""
         await super().start()
 
         usr_bot_me = await self.get_me()
@@ -126,32 +125,27 @@ class Bot(Client):
         #await app.setup()
         #await web.TCPSite(app, "0.0.0.0", PORT).start()
 
-        # ── Hand over to keepalive (blocks forever) ──
-        self._keepalive = KeepAliveManager(
-            client=self,
-            heartbeat_interval=60,  # was 5 min — tighter interval means a dead
-                                    # connection is caught in under ~2 minutes
-                                    # worst-case instead of up to ~5.5 minutes
-            reconnect_delay=5,
-        )
+        # ── Last-resort watchdog (see keepalive.py) ──
+        # It only pings Telegram and restarts the whole process if Telegram stays
+        # unreachable for minutes. It never stops or reconnects the client itself.
+        try:
+            self._watchdog = Watchdog(self)
+            self._watchdog.start()
+        except Exception:
+            self.LOGGER(__name__).exception("Watchdog could not be started; continuing without it.")
 
+        # start() returns here. Pyrofork's run() then waits for SIGTERM/SIGINT
+        # (idle) and calls stop().
 
-        loop = asyncio.get_event_loop()
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            try:
-                loop.add_signal_handler(sig, self._keepalive.request_shutdown)
-            except NotImplementedError:
-                pass
-
-        await self._keepalive.run()
-
-        self.LOGGER(__name__).info("Bot stopped.")
-
-    async def stop(self, *args):
-        if self._keepalive:
-            self._keepalive.request_shutdown()
-        if self.is_connected:
-            await super().stop()
+    async def stop(self, *args, **kwargs):
+        if self._watchdog:
+            self._watchdog.stop()
+        try:
+            await asyncio.wait_for(super().stop(*args, **kwargs), timeout=20)
+        except asyncio.TimeoutError:
+            self.LOGGER(__name__).warning("Client.stop() took longer than 20s, exiting anyway.")
+        except ConnectionError:
+            pass  # was never fully started / already stopped
         self.LOGGER(__name__).info("Bot stopped.")
 
 

@@ -5,12 +5,40 @@ import asyncio
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
-from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated
+from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, MediaCaptionTooLong
 
 from bot import Bot
 from config import FORCE_SUB_CHANNELS, ADMINS, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, START_PIC, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE
-from helper_func import subscribed, decode, get_messages, delete_file, get_missing_fsub_channels
+from helper_func import subscribed, decode, get_messages, delete_file, get_missing_fsub_channels, shorten_caption
 from database.database import add_user, del_user, full_userbase, present_user
+
+
+async def copy_to_user(msg, user_id, caption, reply_markup):
+    """Copy one DB-channel post to the user.
+
+    A bot may only send captions of up to 1024 characters, but posts made by a
+    Premium account can carry up to 2048. Telegram refuses those with
+    MEDIA_CAPTION_TOO_LONG, which used to mean the file was never delivered.
+    Now the file is sent with the caption trimmed to fit instead.
+    """
+    async def send(cap):
+        return await msg.copy(chat_id=user_id, caption=cap, parse_mode=ParseMode.HTML, reply_markup=reply_markup, protect_content=PROTECT_CONTENT)
+
+    try:
+        return await send(caption)
+    except MediaCaptionTooLong:
+        pass
+
+    tried = {caption}
+    for cap in (shorten_caption(caption), shorten_caption(caption, 512), ""):
+        if cap in tried:
+            continue                      # trimming changed nothing, don't repeat the same request
+        tried.add(cap)
+        try:
+            return await send(cap)
+        except MediaCaptionTooLong:
+            continue
+    return None
 
 
 @Bot.on_message(filters.command('start') & filters.private & subscribed)
@@ -29,7 +57,15 @@ async def start_command(client: Client, message: Message):
             base64_string = text.split(" ", 1)[1]
         except:
             return
-        string = await decode(base64_string)
+        try:
+            string = await decode(base64_string)
+        except Exception:
+            # not a link this bot made (cut off or garbled by the app it was shared in)
+            try:
+                await message.reply_text("Something went wrong..!")
+            except (UserIsBlocked, InputUserDeactivated):
+                pass
+            return
         argument = string.split("-")
         if len(argument) == 3:
             try:
@@ -54,14 +90,18 @@ async def start_command(client: Client, message: Message):
                 return
         try:
             temp_msg = await message.reply("Please wait...")
-        except UserIsBlocked:
+        except (UserIsBlocked, InputUserDeactivated):
             return
+        except FloodWait as e:
+            await asyncio.sleep(e.value)      # only a cosmetic message: wait, then carry on without it
+            temp_msg = None
         try:
             messages = await get_messages(client, ids)
         except:
             await message.reply_text("Something went wrong..!")
             return
-        await temp_msg.delete()
+        if temp_msg:
+            await temp_msg.delete()
 
         track_msgs = []
 
@@ -77,38 +117,30 @@ async def start_command(client: Client, message: Message):
             else:
                 reply_markup = None
 
+            try:
+                copied_msg = await copy_to_user(msg, message.from_user.id, caption, reply_markup)
+            except FloodWait as e:
+                # Telegram asked us to slow down: wait, then try this file once more
+                await asyncio.sleep(e.value)
+                try:
+                    copied_msg = await copy_to_user(msg, message.from_user.id, caption, reply_markup)
+                except (UserIsBlocked, InputUserDeactivated):
+                    return
+                except Exception as err:
+                    print(f"Error copying message: {err}")
+                    continue
+            except (UserIsBlocked, InputUserDeactivated):
+                # the user blocked the bot (or deleted the account): nothing more to send
+                return
+            except Exception as e:
+                print(f"Error copying message: {e}")
+                continue
+
+            if not copied_msg:
+                continue                      # empty/deleted post in the DB channel (Pyrofork logs it already)
+
             if AUTO_DELETE_TIME and AUTO_DELETE_TIME > 0:
-
-                try:
-                    copied_msg_for_deletion = await msg.copy(chat_id=message.from_user.id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup, protect_content=PROTECT_CONTENT)
-                    if copied_msg_for_deletion:
-                        track_msgs.append(copied_msg_for_deletion)
-                    else:
-                        print("Failed to copy message, skipping.")
-
-                except FloodWait as e:
-                    await asyncio.sleep(e.value)
-                    copied_msg_for_deletion = await msg.copy(chat_id=message.from_user.id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup, protect_content=PROTECT_CONTENT)
-                    if copied_msg_for_deletion:
-                        track_msgs.append(copied_msg_for_deletion)
-                    else:
-                        print("Failed to copy message after retry, skipping.")
-
-                except Exception as e:
-                    print(f"Error copying message: {e}")
-
-            else:
-                try:
-                    copied_msg = await msg.copy(chat_id=message.from_user.id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup, protect_content=PROTECT_CONTENT)
-                    if not copied_msg:
-                        print("Failed to copy message, skipping.")
-                except FloodWait as e:
-                    await asyncio.sleep(e.value)
-                    copied_msg = await msg.copy(chat_id=message.from_user.id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup, protect_content=PROTECT_CONTENT)
-                    if not copied_msg:
-                        print("Failed to copy message after retry, skipping.")
-                except Exception as e:
-                    print(f"Error copying message: {e}")
+                track_msgs.append(copied_msg)
 
         if track_msgs:
             delete_data = await client.send_message(
@@ -117,8 +149,6 @@ async def start_command(client: Client, message: Message):
             )
             # Schedule the file deletion task after all messages have been copied
             asyncio.create_task(delete_file(track_msgs, client, delete_data))
-        else:
-            print("No messages to track for deletion.")
 
         return
     else:
@@ -245,18 +275,21 @@ async def not_joined(client: Client, message: Message):
         ]
     )
 
-    await message.reply(
-        text = FORCE_MSG.format(
-                first = message.from_user.first_name,
-                last = message.from_user.last_name,
-                username = None if not message.from_user.username else '@' + message.from_user.username,
-                mention = message.from_user.mention,
-                id = message.from_user.id
-            ),
-        reply_markup = InlineKeyboardMarkup(buttons),
-        quote = True,
-        disable_web_page_preview = True
-    )
+    try:
+        await message.reply(
+            text = FORCE_MSG.format(
+                    first = message.from_user.first_name,
+                    last = message.from_user.last_name,
+                    username = None if not message.from_user.username else '@' + message.from_user.username,
+                    mention = message.from_user.mention,
+                    id = message.from_user.id
+                ),
+            reply_markup = InlineKeyboardMarkup(buttons),
+            quote = True,
+            disable_web_page_preview = True
+        )
+    except (UserIsBlocked, InputUserDeactivated):
+        pass  # the user blocked the bot meanwhile
 
 @Bot.on_message(filters.command('users') & filters.private & filters.user(ADMINS))
 async def get_users(client: Bot, message: Message):
@@ -283,7 +316,7 @@ async def send_text(client: Bot, message: Message):
                 await broadcast_msg.copy(chat_id)
                 successful += 1
             except FloodWait as e:
-                await asyncio.sleep(e.x)
+                await asyncio.sleep(e.value)
                 await broadcast_msg.copy(chat_id)
                 successful += 1
             except UserIsBlocked:
