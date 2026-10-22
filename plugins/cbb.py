@@ -1,6 +1,6 @@
 #(©)Codexbotz
 
-from pyrogram import __version__
+from pyrogram import __version__, ContinuePropagation
 from pyrogram.errors import MessageNotModified, MessageDeleteForbidden
 from bot import Bot
 from config import OWNER_ID
@@ -34,3 +34,7 @@ async def cb_handler(client: Bot, query: CallbackQuery):
             await query.message.reply_to_message.delete()
         except:
             pass
+    else:
+        # Not one of our buttons. Only the first matching handler of a group is
+        # run, so hand it on instead of swallowing it.
+        raise ContinuePropagation

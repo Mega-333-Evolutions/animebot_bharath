@@ -101,7 +101,21 @@ python3 main.py
 /broadcast - broadcast any messages to bot users
 
 /stats - checking your bot uptime
+
+/smedia - set the image or GIF sent with /start (owner only)
 ```
+
+### Start media
+
+The image or GIF the bot sends with `/start` is set by the owner with `/smedia`:
+
+```
+/smedia  ->  📷 Set Start Image  |  🎬 Set Start GIF  |  🗑 Remove Current
+```
+
+Pick image or GIF and the bot asks you to send it; it is then stored in the
+database, so it is still there after the bot restarts. Without it `/start` is
+sent as plain text.
 
 ### Variables
 
@@ -113,7 +127,7 @@ python3 main.py
 * `DATABASE_URL` Your mongo db url
 * `ADMINS` Optional: A space separated list of user_ids of Admins, they can only create links
 * `START_MESSAGE` Optional: start message of bot, use HTML and <a href='https://github.com/codexbotz/File-Sharing-Bot/blob/main/README.md#start_message'>fillings</a>
-* `START_PIC` Optional: URL or file path of the image to be sent as the start message
+* `ASK_TIMEOUT` Optional: seconds the bot waits for you to send the start media after picking image or GIF in `/smedia`. Default is 300.
 * `FORCE_SUB_MESSAGE`Optional:Force sub message of bot, use HTML and Fillings
 * `FORCE_SUB_CHANNEL` Optional: ForceSub Channel ID, leave 0 if you want disable force sub
 * `PROTECT_CONTENT` Optional: True if you need to prevent files from forwarding

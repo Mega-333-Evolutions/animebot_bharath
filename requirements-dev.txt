@@ -1,0 +1,4 @@
+# --- For-Tests ------------------------------------------------- #
+pytest
+pytest-asyncio
+mongomock-motor

@@ -46,8 +46,17 @@ JOIN_REQUEST_ENABLE = os.environ.get("JOIN_REQUEST_ENABLED", None)
 TG_BOT_WORKERS = int(os.environ.get("TG_BOT_WORKERS", "16"))
 
 #start message
-START_PIC = os.environ.get("START_PIC","")
 START_MSG = os.environ.get("START_MESSAGE", "Hi {mention}, This bot provides Anime Episodes.\n\nIf you want any other anime then message here 👉 <a href='https://t.me/+lKbsNn0ixhs1Yjk1'>@Animes_Discussion_group</a>")
+
+# How long (seconds) the bot waits for the owner to send the start media
+# after pressing "Set Start Image" / "Set Start GIF" in /smedia.
+ASK_TIMEOUT = int(os.environ.get("ASK_TIMEOUT", "300"))
+
+# The kinds of media that can be used as the start media, and how they are named.
+MEDIA_NAMES = {
+    "photo": "photo (image)",
+    "animation": "GIF",
+}
 try:
     ADMINS=[]
     for x in (os.environ.get("ADMINS", "").split()):

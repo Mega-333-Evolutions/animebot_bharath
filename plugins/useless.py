@@ -1,16 +1,18 @@
+#(©)Codexbotz
+
 from bot import Bot
 from pyrogram.types import Message
 from pyrogram import filters
 from config import ADMINS, BOT_STATS_TEXT, USER_REPLY_TEXT
 from datetime import datetime
 import time
-from helper_func import get_readable_time
+from helper_func import get_readable_time, not_command
 
 @Bot.on_message(filters.command('stats') & filters.user(ADMINS))
 async def stats(bot: Bot, message: Message):
     now = datetime.now()
     delta = now - bot.uptime
-    # delta.seconds only returns the leftover seconds within the current day
+    # delta.seconds only gets the leftover seconds within the current day
     # (0-86399) — once uptime crosses 24h, .days increments and .seconds
     # resets, making uptime look like it restarted. total_seconds() gives
     # the true elapsed time regardless of how many days have passed.
@@ -22,7 +24,11 @@ async def stats(bot: Bot, message: Message):
 
     await message.reply(BOT_STATS_TEXT.format(uptime=uptime_str, ping=ping_ms))
 
-@Bot.on_message(filters.private & filters.incoming)
+# Only the first matching handler of a group is run, and the handlers are
+# registered in the order the plugin files are walked. This catch-all must
+# therefore leave commands alone, or it answers them before the handler that
+# belongs to them ever gets to see them.
+@Bot.on_message(filters.private & filters.incoming & not_command)
 async def useless(_,message: Message):
     if USER_REPLY_TEXT:
         await message.reply(USER_REPLY_TEXT)

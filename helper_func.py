@@ -7,7 +7,8 @@ from html import escape as _html_escape
 from html.parser import HTMLParser
 from pyrogram import filters
 from pyrogram.enums import ChatMemberStatus
-from config import FORCE_SUB_CHANNELS, ADMINS, AUTO_DELETE_TIME, AUTO_DEL_SUCCESS_MSG
+from config import FORCE_SUB_CHANNELS, ADMINS, AUTO_DELETE_TIME, AUTO_DEL_SUCCESS_MSG, LOGGER
+from database.database import get_start_media
 from pyrogram.errors.exceptions.bad_request_400 import UserNotParticipant
 from pyrogram.errors import FloodWait
 
@@ -79,7 +80,7 @@ async def get_message_id(client, message):
     elif message.forward_sender_name:
         return 0
     elif message.text:
-        pattern = "https://t.me/(?:c/)?(.*)/(\d+)"
+        pattern = r"https://t.me/(?:c/)?(.*)/(\d+)"
         matches = re.match(pattern,message.text)
         if not matches:
             return 0
@@ -222,3 +223,57 @@ def shorten_caption(html_text, limit=CAPTION_LIMIT):
 
 
 subscribed = filters.create(is_subscribed)
+
+
+async def is_not_command(_, __, message):
+    """True when the message is not a bot command.
+
+    The generic "reply to every private message" handler has to let commands
+    through, otherwise it answers them before their own handler ever sees them.
+    """
+    return not (message.text or message.caption or "").startswith("/")
+
+
+not_command = filters.create(is_not_command)
+
+
+async def send_start_message(message, text, reply_markup):
+    """Send the /start message, with the saved start media when there is one.
+
+    The media is whatever the owner picked with /smedia; it lives in the
+    database, so it is still there after a restart. Without it the start
+    message is sent as plain text.
+    """
+    media = await get_start_media()
+    if media:
+        media_type = media.get("type")
+        file_id = media.get("file_id")
+        if file_id:
+            try:
+                if media_type == "photo":
+                    await message.reply_photo(
+                        photo=file_id,
+                        caption=text,
+                        reply_markup=reply_markup,
+                        quote=True,
+                    )
+                    return
+                if media_type == "animation":
+                    await message.reply_animation(
+                        animation=file_id,
+                        caption=text,
+                        reply_markup=reply_markup,
+                        quote=True,
+                    )
+                    return
+            except Exception as e:
+                # A file_id can go stale (the bot token changed, for example).
+                # Answering as plain text is better than not answering at all.
+                LOGGER(__name__).warning("Could not send the start media: %s", e)
+
+    await message.reply_text(
+        text=text,
+        reply_markup=reply_markup,
+        disable_web_page_preview=True,
+        quote=True,
+    )
