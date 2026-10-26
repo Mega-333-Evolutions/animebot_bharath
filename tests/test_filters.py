@@ -1,6 +1,8 @@
 """Filters that decide which updates reach which handler."""
 from pyrogram.enums import ChatType
 
+import admin_access
+import helper_func
 from helper_func import not_command
 from plugins.smedia import smedia_cb_filter
 
@@ -63,3 +65,15 @@ async def test_other_callbacks_are_left_alone():
 
 async def test_a_callback_without_data_is_left_alone():
     assert await smedia_cb_filter(None, FakeCallback(None)) is False
+
+
+async def test_an_admin_bypasses_force_sub(monkeypatch):
+    """Admins should not have to join the force-sub channels."""
+    monkeypatch.setattr(helper_func, "FORCE_SUB_CHANNELS", [-1001234567890])
+    monkeypatch.setattr(admin_access, "_admin_ids", {42})
+
+    class Client:
+        async def get_chat_member(self, *args, **kwargs):
+            raise AssertionError("the bot should not ask Telegram about an admin")
+
+    assert await helper_func.get_missing_fsub_channels(Client(), 42) == []

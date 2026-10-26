@@ -16,6 +16,8 @@ from pyrogram.handlers import CallbackQueryHandler, MessageHandler
 
 from config import OWNER_ID
 
+import admin_access
+import plugins.admin
 import plugins.cbb
 import plugins.channel_post
 import plugins.link_generator
@@ -49,6 +51,20 @@ class FakeRegularUser(FakeUser):
     id = 12345
     username = "someone"
     mention = "@someone"
+
+
+class FakeAdminUser(FakeUser):
+    """A user who is an admin but not the owner."""
+
+    id = 54321
+    username = "admin"
+    mention = "@admin"
+
+
+@pytest.fixture
+def cached_admin(monkeypatch):
+    """Make FakeAdminUser an admin without touching a real database."""
+    monkeypatch.setattr(admin_access, "_admin_ids", {FakeAdminUser.id})
 
 
 class FakeClient:
@@ -169,6 +185,77 @@ async def test_the_users_command_reaches_its_own_handler(handlers):
 
     assert handler is not None
     assert callback_of(handler) is plugins.start.get_users
+
+
+@pytest.mark.parametrize(
+    "command, expected",
+    [
+        ("/addadmin 123", plugins.admin.addadmin_cmd),
+        ("/deladmin 123", plugins.admin.deladmin_cmd),
+        ("/stats", plugins.useless.stats),
+        ("/users", plugins.start.get_users),
+        ("/broadcast", plugins.start.send_text),
+    ],
+)
+async def test_owner_only_commands_reach_their_handlers(command, expected, handlers):
+    handler = await first_matching_handler(FakeMessage(command), handlers)
+
+    assert handler is not None
+    assert callback_of(handler) is expected
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["/addadmin 123", "/deladmin 123", "/stats", "/users", "/broadcast"],
+)
+async def test_owner_only_commands_ignore_a_non_owner_admin(
+    command, handlers, cached_admin
+):
+    handler = await first_matching_handler(
+        FakeMessage(command, user=FakeAdminUser()), handlers
+    )
+
+    assert handler is None
+
+
+@pytest.mark.parametrize(
+    "command, expected",
+    [
+        ("/batch", plugins.link_generator.batch),
+        ("/genlink", plugins.link_generator.link_generator),
+    ],
+)
+async def test_admin_only_commands_work_for_an_admin(
+    command, expected, handlers, cached_admin
+):
+    handler = await first_matching_handler(
+        FakeMessage(command, user=FakeAdminUser()), handlers
+    )
+
+    assert handler is not None
+    assert callback_of(handler) is expected
+
+
+@pytest.mark.parametrize("command", ["/batch", "/genlink"])
+async def test_admin_only_commands_ignore_a_regular_user(
+    command, handlers, cached_admin
+):
+    handler = await first_matching_handler(
+        FakeMessage(command, user=FakeRegularUser()), handlers
+    )
+
+    assert handler is None
+
+
+async def test_a_plain_message_from_an_admin_is_posted_to_the_db_channel(
+    handlers, cached_admin
+):
+    handler = await first_matching_handler(
+        FakeMessage("hello", user=FakeAdminUser()), handlers
+    )
+
+    assert handler is not None
+    assert callback_of(handler) is plugins.channel_post.channel_post
 
 
 async def test_a_plain_message_still_gets_the_generic_reply(handlers):

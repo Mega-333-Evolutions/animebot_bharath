@@ -2,3 +2,5 @@
 pytest
 pytest-asyncio
 mongomock-motor
+# imported by mongomock-motor but not declared by it
+typing_extensions

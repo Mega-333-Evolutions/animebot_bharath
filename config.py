@@ -19,7 +19,7 @@ API_HASH = os.environ.get("API_HASH", "3fe4592e4cad72f366b6c564505f2d57")
 #Your db channel Id
 CHANNEL_ID = int(os.environ.get("CHANNEL_ID", ""))
 
-#OWNER ID
+#OWNER ID — always an admin, and cannot be removed
 OWNER_ID = int(os.environ.get("OWNER_ID", "8495104954"))
 
 #Port
@@ -57,12 +57,6 @@ MEDIA_NAMES = {
     "photo": "photo (image)",
     "animation": "GIF",
 }
-try:
-    ADMINS=[]
-    for x in (os.environ.get("ADMINS", "").split()):
-        ADMINS.append(int(x))
-except ValueError:
-        raise Exception("Your Admins list does not contain valid integers.")
 
 #Force sub message 
 FORCE_MSG = os.environ.get("FORCE_SUB_MESSAGE", "Hey {mention}, Please join the below channels and press try again 👇👇👇")
@@ -83,8 +77,6 @@ DISABLE_CHANNEL_BUTTON = os.environ.get("DISABLE_CHANNEL_BUTTON", None) == 'True
 
 BOT_STATS_TEXT = "Hi, I'm alive and ready to store and share files.\n\n<b>⏱ UPTIME : </b>{uptime}\n<b>📶 PING : </b>{ping} ms"
 USER_REPLY_TEXT = "If you have any problems or need anything kindly report it in our group <a href='https://t.me/+lKbsNn0ixhs1Yjk1'>@Animes_Discussion_group</a>"
-
-ADMINS.append(OWNER_ID)
 
 LOG_FILE_NAME = "filesharingbot.txt"
 

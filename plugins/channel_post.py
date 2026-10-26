@@ -6,10 +6,11 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait
 
 from bot import Bot
-from config import ADMINS, CHANNEL_ID, DISABLE_CHANNEL_BUTTON
+from config import CHANNEL_ID, DISABLE_CHANNEL_BUTTON
+from admin_access import admin_filter
 from helper_func import encode
 
-@Bot.on_message(filters.private & filters.user(ADMINS) & ~filters.command(['start','users','broadcast','batch','genlink','stats','smedia']))
+@Bot.on_message(filters.private & admin_filter & ~filters.command(['start','users','broadcast','batch','genlink','stats','smedia','addadmin','deladmin']))
 async def channel_post(client: Client, message: Message):
     reply_text = await message.reply_text("Please Wait...!", quote = True)
     try:

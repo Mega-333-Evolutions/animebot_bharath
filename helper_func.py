@@ -7,7 +7,8 @@ from html import escape as _html_escape
 from html.parser import HTMLParser
 from pyrogram import filters
 from pyrogram.enums import ChatMemberStatus
-from config import FORCE_SUB_CHANNELS, ADMINS, AUTO_DELETE_TIME, AUTO_DEL_SUCCESS_MSG, LOGGER
+from config import FORCE_SUB_CHANNELS, AUTO_DELETE_TIME, AUTO_DEL_SUCCESS_MSG, LOGGER
+from admin_access import is_admin
 from database.database import get_start_media
 from pyrogram.errors.exceptions.bad_request_400 import UserNotParticipant
 from pyrogram.errors import FloodWait
@@ -15,7 +16,7 @@ from pyrogram.errors import FloodWait
 
 async def get_missing_fsub_channels(client, user_id):
     """Return the list of configured force-sub channel IDs the user has NOT joined yet."""
-    if user_id in ADMINS:
+    if is_admin(user_id):
         return []
     missing = []
     for channel_id in FORCE_SUB_CHANNELS:

@@ -8,9 +8,9 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, MediaCaptionTooLong
 
 from bot import Bot
-from config import FORCE_SUB_CHANNELS, ADMINS, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE
+from config import FORCE_SUB_CHANNELS, OWNER_ID, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE
 from helper_func import subscribed, decode, get_messages, delete_file, get_missing_fsub_channels, shorten_caption, send_start_message
-from database.database import add_user, del_user, full_userbase, present_user
+from database.database import add_user, del_user, full_userbase
 
 
 async def copy_to_user(msg, user_id, caption, reply_markup):
@@ -44,11 +44,11 @@ async def copy_to_user(msg, user_id, caption, reply_markup):
 @Bot.on_message(filters.command('start') & filters.private & subscribed)
 async def start_command(client: Client, message: Message):
     id = message.from_user.id
-    if not await present_user(id):
-        try:
-            await add_user(id)
-        except:
-            pass
+    try:
+        # The username is saved too, so the owner can use /addadmin @username.
+        await add_user(id, message.from_user.username)
+    except Exception:
+        pass
     text = message.text
     # "/start start" (the Try Again link for people with no file payload) must
     # behave exactly like a plain /start instead of being decoded as a file link.
@@ -278,16 +278,14 @@ async def not_joined(client: Client, message: Message):
     except (UserIsBlocked, InputUserDeactivated):
         pass  # the user blocked the bot meanwhile
 
-@Bot.on_message(filters.command('users') & filters.private & filters.user(ADMINS))
+@Bot.on_message(filters.command('users') & filters.private & filters.user([OWNER_ID]))
 async def get_users(client: Bot, message: Message):
     msg = await client.send_message(chat_id=message.chat.id, text=WAIT_MSG)
     users = await full_userbase()
     await msg.edit(f"{len(users)} users are using this bot")
 
-@Bot.on_message(filters.private & filters.command('broadcast') & filters.user(ADMINS))
+@Bot.on_message(filters.private & filters.command('broadcast') & filters.user([OWNER_ID]))
 async def send_text(client: Bot, message: Message):
-    if message.from_user.id != 1001484109: 
-        return await message.reply("Sorry, only the Bot Owner can use the broadcast command!")
     if message.reply_to_message:
         query = await full_userbase()
         broadcast_msg = message.reply_to_message

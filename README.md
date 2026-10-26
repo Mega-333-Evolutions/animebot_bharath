@@ -87,23 +87,37 @@ pip3 install -r requirements.txt
 python3 main.py
 ````
 
-### Admin Commands
+### Commands
+
+Everyone:
 
 ```
 /start - start the bot or get posts
-
-/batch - create link for more than one posts
-
-/genlink - create link for one post
-
-/users - view bot statistics
-
-/broadcast - broadcast any messages to bot users
-
-/stats - checking your bot uptime
-
-/smedia - set the image or GIF sent with /start (owner only)
 ```
+
+Admins:
+
+```
+/batch - create link for more than one posts
+/genlink - create link for one post
+```
+
+Owner only:
+
+```
+/addadmin <user_id or @username> - add an admin
+/deladmin <user_id or @username> - remove an admin
+/users - view how many users the bot has
+/broadcast - broadcast any message to bot users (reply to the message)
+/stats - check your bot uptime
+/smedia - set the image or GIF sent with /start
+```
+
+Admins are stored in MongoDB, so they survive a restart. Add or remove them
+with `/addadmin` and `/deladmin`; the `OWNER_ID` account is always an admin
+and cannot be removed. Usernames can only be resolved for users the bot has
+seen, so if an `@username` is not known yet, ask that person to `/start` the
+bot once or use their numeric Telegram user ID.
 
 ### Start media
 
@@ -122,10 +136,9 @@ sent as plain text.
 * `API_HASH` Your API Hash from my.telegram.org
 * `APP_ID` Your API ID from my.telegram.org
 * `TG_BOT_TOKEN` Your bot token from @BotFather
-* `OWNER_ID` Must enter Your Telegram Id
+* `OWNER_ID` Must enter Your Telegram Id. This account is always an admin and can manage the admin list.
 * `CHANNEL_ID` Your Channel ID eg:- -100xxxxxxxx
 * `DATABASE_URL` Your mongo db url
-* `ADMINS` Optional: A space separated list of user_ids of Admins, they can only create links
 * `START_MESSAGE` Optional: start message of bot, use HTML and <a href='https://github.com/codexbotz/File-Sharing-Bot/blob/main/README.md#start_message'>fillings</a>
 * `ASK_TIMEOUT` Optional: seconds the bot waits for you to send the start media after picking image or GIF in `/smedia`. Default is 300.
 * `FORCE_SUB_MESSAGE`Optional:Force sub message of bot, use HTML and Fillings

@@ -3,12 +3,13 @@
 from bot import Bot
 from pyrogram.types import Message
 from pyrogram import filters
-from config import ADMINS, BOT_STATS_TEXT, USER_REPLY_TEXT
+from admin_access import admin_filter
+from config import BOT_STATS_TEXT, OWNER_ID, USER_REPLY_TEXT
 from datetime import datetime
 import time
 from helper_func import get_readable_time, not_command
 
-@Bot.on_message(filters.command('stats') & filters.user(ADMINS))
+@Bot.on_message(filters.command('stats') & filters.user([OWNER_ID]))
 async def stats(bot: Bot, message: Message):
     now = datetime.now()
     delta = now - bot.uptime
@@ -28,7 +29,7 @@ async def stats(bot: Bot, message: Message):
 # registered in the order the plugin files are walked. This catch-all must
 # therefore leave commands alone, or it answers them before the handler that
 # belongs to them ever gets to see them.
-@Bot.on_message(filters.private & filters.incoming & not_command)
+@Bot.on_message(filters.private & filters.incoming & not_command & ~admin_filter)
 async def useless(_,message: Message):
     if USER_REPLY_TEXT:
         await message.reply(USER_REPLY_TEXT)

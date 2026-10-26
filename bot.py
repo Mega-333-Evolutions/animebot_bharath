@@ -32,6 +32,7 @@ from config import (
     PORT
 )
 from keepalive import Watchdog
+from admin_access import load_admins
 
 ascii_art = """
 ░█████╗░░█████╗░██████╗░███████╗██╗░░██╗██████╗░░█████╗░████████╗███████╗
@@ -62,6 +63,11 @@ class Bot(Client):
         usr_bot_me = await self.get_me()
         self.uptime = datetime.now()
         self.username = usr_bot_me.username
+
+        # ── Admins ──
+        # The admin list lives in MongoDB and is managed with /addadmin and
+        # /deladmin. Load it once so handler filters stay fast.
+        await load_admins()
 
         # ── Force Sub Channels (1-3, all optional) ──
         self.invitelink = None       # kept for backward compatibility (1st channel)
