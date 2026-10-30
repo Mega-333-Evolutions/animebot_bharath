@@ -8,8 +8,9 @@ from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, MediaCaptionTooLong
 
 from bot import Bot
-from config import FORCE_SUB_CHANNELS, OWNER_ID, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE
+from config import FORCE_SUB_CHANNELS, OWNER_ID, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE, LOGGER
 from helper_func import subscribed, decode, get_messages, delete_file, get_missing_fsub_channels, shorten_caption, send_start_message
+from telegram_trouble import TELEGRAM_TROUBLE, FORCE_SUB_FAIL_OPEN, CHECK_TIMEOUT, RECHECK_AFTER, outage
 from database.database import add_user, del_user, full_userbase
 
 
@@ -41,7 +42,96 @@ async def copy_to_user(msg, user_id, caption, reply_markup):
     return None
 
 
-@Bot.on_message(filters.command('start') & filters.private & subscribed)
+FSUB_UNAVAILABLE_MSG = (
+    "⚠️ <b>I can't check whether you have joined the channels right now.</b>\n\n"
+    "Please wait a minute, then press <b>Try Again</b>."
+)
+
+FILES_FAILED_MSG = (
+    "⚠️ <b>{count} {noun} could not be sent.</b>\n\n"
+    "Please wait a minute, then press <b>Try Again</b>."
+)
+
+
+def try_again_markup(client, message):
+    """One "Try Again" button that opens the same /start link again (or a plain /start)."""
+    username = getattr(client, "username", None)
+    if not username:
+        return None
+    command = getattr(message, "command", None) or []
+    payload = command[1] if len(command) > 1 else "start"
+    return InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", url=f"https://t.me/{username}?start={payload}")]])
+
+
+async def notify(message, text, reply_markup=None):
+    """Tell the user something. While Telegram is in trouble even this can fail, and that must not become a traceback."""
+    try:
+        await message.reply_text(text, reply_markup=reply_markup, quote=True, disable_web_page_preview=True)
+    except (UserIsBlocked, InputUserDeactivated):
+        pass
+    except Exception as e:
+        LOGGER(__name__).warning("Could not send a notice to user %s: %s", message.from_user.id, str(e) or repr(e))
+
+
+def log_fsub_failure(user_id, error):
+    """One quiet line when Telegram could not answer, the full traceback for anything else."""
+    if isinstance(error, TELEGRAM_TROUBLE):
+        LOGGER(__name__).warning("Force-sub check: Telegram could not answer for user %s: %s", user_id, str(error) or repr(error) or type(error).__name__)
+    else:
+        LOGGER(__name__).error("Force-sub check failed for user %s", user_id, exc_info=error)
+
+
+async def _safe_subscribed(_, client, message):
+    """The `subscribed` filter, made to cope with Telegram not being able to answer.
+
+    The membership check itself (helper_func.subscribed) is untouched, and it
+    decides as before whenever Telegram answers. What changes is what happens when
+    Telegram cannot answer it (its servers are down for everybody, or the lookup
+    takes longer than CHECK_TIMEOUT):
+
+    * people are let through, so they get their files (FORCE_SUB_FAIL_OPEN=0 turns
+      this off: then they are asked to try again instead);
+    * for RECHECK_AFTER seconds after a failure nobody is looked up at all, so the
+      next people do not each wait for the same failure;
+    * any other error (wrong channel ID, bot not admin there, a bug) is NOT an
+      outage: it is logged with its traceback and nobody is let through, so a
+      misconfiguration cannot silently switch force-sub off.
+
+    Before, any of these raised inside the filter, Pyrofork logged a traceback and
+    treated it as "no match", the not_joined handler asked Telegram a second time,
+    failed again, and the user got no reply at all.
+    """
+    user_id = message.from_user.id if message.from_user else None
+
+    if FORCE_SUB_FAIL_OPEN and outage.active():
+        return True
+
+    try:
+        result = await asyncio.wait_for(subscribed(client, message), timeout=CHECK_TIMEOUT)
+    except TELEGRAM_TROUBLE as e:
+        if FORCE_SUB_FAIL_OPEN:
+            if outage.start(RECHECK_AFTER):
+                LOGGER(__name__).warning(
+                    "Force-sub check: Telegram could not answer for user %s (%s). Letting people through "
+                    "without checking until it answers again.", user_id, str(e) or type(e).__name__)
+            return True
+        log_fsub_failure(user_id, e)
+        message._fsub_unavailable = True
+        return False
+    except Exception as e:
+        log_fsub_failure(user_id, e)
+        message._fsub_unavailable = True
+        return False
+
+    if outage.ok():
+        LOGGER(__name__).info("Force-sub check: Telegram answers again, checking everyone as usual.")
+    return result
+
+
+safe_subscribed = filters.create(_safe_subscribed)
+
+
+@Bot.on_message(filters.command('start') & filters.private & safe_subscribed)
 async def start_command(client: Client, message: Message):
     id = message.from_user.id
     try:
@@ -95,15 +185,22 @@ async def start_command(client: Client, message: Message):
         except FloodWait as e:
             await asyncio.sleep(e.value)      # only a cosmetic message: wait, then carry on without it
             temp_msg = None
+        except TELEGRAM_TROUBLE as e:
+            LOGGER(__name__).warning("Could not send the 'Please wait' message: %s", str(e) or repr(e))
+            temp_msg = None                   # cosmetic too: carry on without it
         try:
             messages = await get_messages(client, ids)
         except:
             await message.reply_text("Something went wrong..!")
             return
         if temp_msg:
-            await temp_msg.delete()
+            try:
+                await temp_msg.delete()
+            except Exception:
+                pass                          # cosmetic: a leftover "Please wait..." must not stop the files
 
         track_msgs = []
+        failed = 0                            # files Telegram would not take, so the user can be told
 
         for msg in messages:
 
@@ -127,13 +224,15 @@ async def start_command(client: Client, message: Message):
                 except (UserIsBlocked, InputUserDeactivated):
                     return
                 except Exception as err:
-                    print(f"Error copying message: {err}")
+                    failed += 1
+                    LOGGER(__name__).warning("Could not send message %s to user %s: %s", msg.id, message.from_user.id, str(err) or repr(err))
                     continue
             except (UserIsBlocked, InputUserDeactivated):
                 # the user blocked the bot (or deleted the account): nothing more to send
                 return
             except Exception as e:
-                print(f"Error copying message: {e}")
+                failed += 1
+                LOGGER(__name__).warning("Could not send message %s to user %s: %s", msg.id, message.from_user.id, str(e) or repr(e))
                 continue
 
             if not copied_msg:
@@ -141,6 +240,13 @@ async def start_command(client: Client, message: Message):
 
             if AUTO_DELETE_TIME and AUTO_DELETE_TIME > 0:
                 track_msgs.append(copied_msg)
+
+        if failed:
+            await notify(
+                message,
+                FILES_FAILED_MSG.format(count=failed, noun="file" if failed == 1 else "files"),
+                try_again_markup(client, message),
+            )
 
         if track_msgs:
             delete_data = await client.send_message(
@@ -189,7 +295,18 @@ REPLY_ERROR = """<code>Use this command as a replay to any telegram message with
 async def not_joined(client: Client, message: Message):
 
     user_id = message.from_user.id
-    missing_channels = await get_missing_fsub_channels(client, user_id)
+    if getattr(message, "_fsub_unavailable", False):
+        # The filter above could not get an answer from Telegram a moment ago.
+        # Asking again right away would only fail again: say so instead.
+        await notify(message, FSUB_UNAVAILABLE_MSG, try_again_markup(client, message))
+        return
+    try:
+        missing_channels = await get_missing_fsub_channels(client, user_id)
+    except Exception as e:
+        # Telegram stopped answering between the filter and now.
+        log_fsub_failure(user_id, e)
+        await notify(message, FSUB_UNAVAILABLE_MSG, try_again_markup(client, message))
+        return
 
     join_buttons = []
     for channel_id in missing_channels:

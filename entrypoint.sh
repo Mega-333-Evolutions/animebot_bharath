@@ -16,6 +16,7 @@ STABLE_AFTER="${RESTART_STABLE_AFTER:-60}"   # ran at least this long = not a cr
 stopping=0
 child=""
 export BOT_SUPERVISED=1   # tells the bot a supervisor restarts it, so its watchdog just exits
+export PYTHONUNBUFFERED=1  # show print() output in the Space log right away (it was held back in a buffer)
 
 log() { echo "[entrypoint] $*"; }
 
